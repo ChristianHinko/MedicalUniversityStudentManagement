@@ -1,0 +1,191 @@
+﻿@page "/studentinfo"
+@using System.Text.Json
+@inject IHttpClientFactory ClientFactory
+@inject IConfiguration Configuration
+@inject ProtectedSessionStorage sessionStorage
+
+<Card>
+    @{
+        if (isEditable && UserType == "Student")
+        {
+            <CardTitle Size="5">Edit Student Info here:</CardTitle>
+            <CardBody>
+                StudentIdNumber: <TextEdit @ref="StudentIdNumberTextEdit" Placeholder="@myStudent?.StudentIdNumber.ToString()" />
+                FirstName: <TextEdit @ref="FirstNameTextEdit" Placeholder="@myStudent?.FirstName" />
+                LastName: <TextEdit @ref="LastNameTextEdit" Placeholder="@myStudent?.LastName" />
+                Birthday: <br />
+                <Card>
+                    <CardBody>
+                        Year (ie. 2002): <TextEdit @ref="BirthdayYearTextEdit" Placeholder="@myStudent?.Birthday.ToString()" /> Month (ie. 5): <TextEdit @ref="BirthdayMonthTextEdit" Placeholder="@myStudent?.Birthday.ToString()" /> Day (ie. 8): <TextEdit @ref="BirthdayDayTextEdit" Placeholder="@myStudent?.Birthday.ToString()" />
+                    </CardBody>
+                </Card>
+                Address: <TextEdit @ref="AddressTextEdit" Placeholder="@myStudent?.Address" />
+                Major: <TextEdit @ref="MajorTextEdit" Placeholder="@myStudent?.Major" />
+                FirstYearEnrolled: <TextEdit @ref="FirstYearEnrolledTextEdit" Placeholder="@myStudent?.FirstYearEnrolled.ToString()" />
+                HighSchoolAttended: <TextEdit @ref="HighSchoolAttendedTextEdit" Placeholder="@myStudent?.HighSchoolAttended" />
+                UndergraduateSchoolAttended: <TextEdit @ref="UndergraduateSchoolAttendedTextEdit" Placeholder="@myStudent?.UndergraduateSchoolAttended" />
+            </CardBody>
+            <Button Clicked="@OnCancelButtonClicked">Cancel</Button>
+            <Button Color="Color.Primary" Clicked="@OnSubmitButtonClicked">Submit</Button>
+        }
+        else
+        {
+            if (UserType == "Student")
+            {
+                <Button Color="Color.Warning" Clicked="@OnEditableButtonClicked">Edit</Button>
+            }
+            <CardBody>
+                <CardTitle Size="5">Student Info</CardTitle>
+                StudentIdNumber: @myStudent?.StudentIdNumber
+                <br />
+                FirstName: @myStudent?.FirstName
+                <br />
+                LastName: @myStudent?.LastName
+                <br />
+                Birthday: @myStudent?.Birthday.ToString()
+                <br />
+                Address: @myStudent?.Address
+                <br />
+                Major: @myStudent?.Major
+                <br />
+                FirstYearEnrolled: @myStudent?.FirstYearEnrolled.ToString()
+                <br />
+                HighSchoolAttended: @myStudent?.HighSchoolAttended
+                <br />
+                UndergraduateSchoolAttended: @myStudent?.UndergraduateSchoolAttended
+            </CardBody>
+        }
+    }
+</Card>
+
+
+
+
+<ChangePasswordComponent/>
+
+
+
+
+
+
+@code
+{
+    TextEdit StudentIdNumberTextEdit, FirstNameTextEdit, LastNameTextEdit, BirthdayYearTextEdit, BirthdayMonthTextEdit, BirthdayDayTextEdit, AddressTextEdit, MajorTextEdit, FirstYearEnrolledTextEdit, HighSchoolAttendedTextEdit, UndergraduateSchoolAttendedTextEdit;
+    [Parameter]
+    public StudentModel myStudent { get; set; } = null;
+    private string UserType = string.Empty;
+
+    // Blazor event
+    protected override async Task OnInitializedAsync()
+    {
+        UserType = (await sessionStorage.GetAsync<string>("UserType")).Value ?? string.Empty;
+        try
+        {
+            int idToQuery = (await sessionStorage.GetAsync<int>("LoginId")).Value;
+
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "GetStudentByLoginId";
+            endpoint += '?' + $"loginId={idToQuery}";
+
+            // Call the endpoint
+            HttpResponseMessage response = await ClientFactory.CreateClient().GetAsync(endpoint);
+
+            // Set our Student
+            myStudent = await response.Content.ReadFromJsonAsync<StudentModel>();
+
+            // Log the response
+            Console.WriteLine(await response.Content.ReadAsStringAsync());
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+        StateHasChanged();
+    }
+
+
+    bool isEditable = false;
+
+    void OnEditableButtonClicked()
+    {
+        isEditable = true;
+    }
+
+    void OnCancelButtonClicked()
+    {
+        isEditable = false;
+    }
+
+    async Task OnSubmitButtonClicked()
+    {
+        int studentIdNumber;
+        if (int.TryParse(StudentIdNumberTextEdit?.Text, out studentIdNumber))
+        {
+            myStudent.StudentIdNumber = studentIdNumber;
+        }
+        string firstName = FirstNameTextEdit?.Text;
+        if (string.IsNullOrEmpty(firstName) == false)
+        {
+            myStudent.FirstName = firstName;
+        }
+        string lastName = LastNameTextEdit?.Text;
+        if (string.IsNullOrEmpty(lastName) == false)
+        {
+            myStudent.LastName = lastName;
+        }
+        int birthdayYear;
+        int birthdayMonth;
+        int birthdayDay;
+        if (int.TryParse(BirthdayYearTextEdit?.Text, out birthdayYear) && int.TryParse(BirthdayMonthTextEdit?.Text, out birthdayMonth) && int.TryParse(BirthdayDayTextEdit?.Text, out birthdayDay))
+        {
+            myStudent.Birthday = new DateTime(birthdayYear, birthdayMonth, birthdayDay);
+        }
+        string address = AddressTextEdit?.Text;
+        if (string.IsNullOrEmpty(address) == false)
+        {
+            myStudent.Address = address;
+        }
+        string major = MajorTextEdit?.Text;
+        if (string.IsNullOrEmpty(major) == false)
+        {
+            myStudent.Major = major;
+        }
+        int firstYearEnrolled;
+        if (int.TryParse(FirstYearEnrolledTextEdit?.Text, out firstYearEnrolled))
+        {
+            myStudent.FirstYearEnrolled = firstYearEnrolled;
+        }
+        string highSchoolAttended = HighSchoolAttendedTextEdit?.Text;
+        if (string.IsNullOrEmpty(highSchoolAttended) == false)
+        {
+            myStudent.HighSchoolAttended = highSchoolAttended;
+        }
+        string undergraduateSchoolAttended = UndergraduateSchoolAttendedTextEdit?.Text;
+        if (string.IsNullOrEmpty(undergraduateSchoolAttended) == false)
+        {
+            myStudent.UndergraduateSchoolAttended = undergraduateSchoolAttended;
+        }
+
+
+        // Update this Student in the database
+        try
+        {
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "UpdateStudentById/";
+
+            // The HTTP request body we will send
+            string jsonRequiredArtifact = JsonSerializer.Serialize<StudentModel>(myStudent);
+            StringContent httpContent = new(jsonRequiredArtifact);
+
+            // Call the endpoint
+            HttpResponseMessage response = await ClientFactory.CreateClient().PutAsync(endpoint, httpContent);
+            isEditable = false;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+    }
+}

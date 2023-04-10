@@ -1,0 +1,34 @@
+﻿@page "/myartifacts"
+@inject IConfiguration Configuration
+@inject IHttpClientFactory ClientFactory
+@inject ProtectedSessionStorage sessionStorage
+
+
+<h3>MyArtifacts</h3>
+
+
+
+<ArtifactEditor myStudent="new StudentModel { Id = loggedInId }"/>
+
+
+@code
+{
+    Int32 loggedInId = -1;
+    // Blazor event
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+
+    }
+
+
+
+    public async Task Reload()
+    {
+        loggedInId = (await sessionStorage.GetAsync<Int32>("LoginId")).Value;
+        StateHasChanged();
+    }
+
+
+
+}

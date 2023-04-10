@@ -1,0 +1,95 @@
+﻿@page "/"
+@inject NavigationManager NavManager
+@inject ProtectedSessionStorage sessionStorage
+@inject IConfiguration Configuration
+@inject IHttpClientFactory ClientFactory
+
+<CardBody>
+    <CardTitle Size="5">Welcome</CardTitle>
+    Username: <TextEdit @ref="@username_textbox" Placeholder="@myLogin?.Username" />
+    Password: <TextEdit @ref="@password_textbox" Placeholder="@myLogin?.Password" Role="TextRole.Password" />
+</CardBody>
+
+
+<Button Color="Color.Primary" Clicked="@OnSubmitButtonClicked">Submit</Button>
+<p style="color:red">@errorMessage</p>
+@*<Button Color="Color.Warning" Clicked="@BypassAdmin">Admin</Button>
+<Button Color="Color.Warning" Clicked="@BypassStaff">Staff</Button>
+<Button Color="Color.Warning" Clicked="@BypassStudent">Student</Button>*@
+
+@code
+{
+    public LoginModel myLogin { get; set; } = new LoginModel();
+
+    String errorMessage = string.Empty;
+    public TextEdit username_textbox;
+    public TextEdit password_textbox;
+
+
+    async Task OnSubmitButtonClicked()
+    {
+        myLogin.Username = username_textbox.Text;
+        myLogin.Password = password_textbox.Text;
+
+
+        // Get our LoginModel given this Username and Password
+        try
+        {
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "GetLoginByUsernameAndPassword";
+            endpoint += '?' + $"username={myLogin.Username}" + '&' + $"password={myLogin.Password}";
+
+            // Call the endpoint
+            HttpResponseMessage response = await ClientFactory.CreateClient().GetAsync(endpoint);
+
+
+            // Try to get the Login from the response
+            try
+            {
+                LoginModel login = await response.Content.ReadFromJsonAsync<LoginModel>();
+                myLogin = login;
+                errorMessage = string.Empty;
+            }
+            catch (Exception e)
+            {
+                errorMessage = "Invalid username or password.";
+                return;
+            }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+            return;
+        }
+
+
+        await sessionStorage.SetAsync("LoginId", myLogin.Id);
+        await sessionStorage.SetAsync("Username", myLogin.Username.ToString());
+        await sessionStorage.SetAsync("Password", myLogin.Password.ToString());
+        await sessionStorage.SetAsync("UserType", myLogin.UserType.ToString());
+
+        NavManager.NavigateTo("/home", true);
+    }
+
+
+
+    // DELETE ALL 3 OF THESE LATER:
+
+    async Task BypassAdmin()
+    {
+        await sessionStorage.SetAsync("UserType", "Admin");
+        NavManager.NavigateTo("/home", true);
+    }
+
+    async Task BypassStaff()
+    {
+        await sessionStorage.SetAsync("UserType", "Staff");
+        NavManager.NavigateTo("/home", true);
+    }
+
+    async Task BypassStudent()
+    {
+        await sessionStorage.SetAsync("UserType", "Student");
+        NavManager.NavigateTo("/home", true);
+    }
+}

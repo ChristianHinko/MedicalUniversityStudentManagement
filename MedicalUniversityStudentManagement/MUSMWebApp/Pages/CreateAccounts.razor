@@ -1,0 +1,222 @@
+﻿@page "/createaccounts"
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+@inject IHttpClientFactory ClientFactory
+@inject NavigationManager NavManager
+@inject ProtectedSessionStorage sessionStorage
+
+
+@{
+    if (!createStaff && !createStudent)
+    {
+        <Button Color="Color.Success" Clicked="@OnAddStaffButtonClicked">Create Staff Account</Button>
+        <Button Color="Color.Success" Clicked="@OnAddStudentButtonClicked">Create Student Account</Button>
+    }
+    else
+    {
+        <Button Color="Color.Danger" Clicked="@OnBackButtonClicked">Back</Button>
+    }
+}
+
+
+<Card>
+    @{
+        if (createStaff)
+        {
+            if (isEditable)
+            {
+                <CardBody>
+                    <CardTitle Size="5">New Staff Member</CardTitle>
+                    Username: <TextEdit @ref="@user_textbox_staff" Placeholder="Create Username" />
+                    Password: <TextEdit @ref="@pass_textbox_staff" Placeholder="Create Password" />
+                </CardBody>
+                <Button Clicked="@OnCancelButtonClicked">Cancel</Button>
+                <Button Color="Color.Success" Clicked="@OnAddButtonClickedStaff">Add</Button>
+            }
+            else
+            {
+                <Button Color="Color.Warning" Clicked="@OnEditableButtonClicked">Edit</Button>
+                <CardBody>
+                    <CardTitle Size="5">New Staff Member</CardTitle>
+                    Username: @newUser?.Username
+                    <br />
+                    Password: ******
+                    <br />
+                </CardBody>
+            }
+        }
+        else if (createStudent)
+        {
+            if (isEditable)
+            {
+                <CardBody>
+                    <CardTitle Size="5">New Student</CardTitle>
+                    Username: <TextEdit @ref="@user_textbox_student" Placeholder="Create Username" />
+                    Password: <TextEdit @ref="@pass_textbox_student" Placeholder="Create Password" />
+
+                    <MyStaff @ref="@myStaffComponent"/>
+
+                </CardBody>
+                <Button Clicked="@OnCancelButtonClicked">Cancel</Button>
+                <Button Color="Color.Success" Clicked="@OnAddButtonClickedStudent">Add</Button>
+            }
+            else
+            {
+                <Button Color="Color.Warning" Clicked="@OnEditableButtonClicked">Edit</Button>
+                <CardBody>
+                    <CardTitle Size="5">New Student</CardTitle>
+                    Username: @newUser?.Username
+                    <br />
+                    Password: ******
+                    <br />
+                </CardBody>
+            }
+        }
+    }
+</Card>
+<p style="color:#FF0000">@info</p>
+
+
+@code
+{
+    MyStaff myStaffComponent;
+    [Parameter]
+    public LoginModel newUser { get; set; } = new LoginModel();
+
+    public TextEdit user_textbox_student, user_textbox_staff, pass_textbox_student, pass_textbox_staff;
+    String info = string.Empty;
+
+    bool isEditable = false;
+    bool createStaff = false;
+    bool createStudent = false;
+
+    void OnEditableButtonClicked()
+    {
+        isEditable = true;
+    }
+
+    void OnCancelButtonClicked()
+    {
+        isEditable = false;
+        info = string.Empty;
+    }
+
+    void OnAddStaffButtonClicked()
+    {
+        createStaff = true;
+        createStudent = false;
+    }
+
+    void OnAddStudentButtonClicked()
+    {
+        createStudent = true;
+        createStaff = false;
+    }
+
+    void OnBackButtonClicked()
+    {
+        isEditable = false;
+        createStudent = false;
+        createStaff = false;
+        info = string.Empty;
+        newUser.Username = string.Empty;
+        newUser.Password = string.Empty;
+    }
+
+    async Task OnAddButtonClickedStaff()
+    {
+        newUser.Username = user_textbox_staff.Text;
+        newUser.Password = pass_textbox_staff.Text;
+
+        if (newUser.Username == null || newUser.Password == null)
+        {
+            info = "Please enter a username and password.";
+            newUser.Username = string.Empty;
+            newUser.Password = string.Empty;
+            return;
+        }
+
+        newUser.UserType = UserType.Staff;
+
+        //TODO: store STAFF user in database
+
+        // Create the staff
+        try
+        {
+            LoginModel loginToSend = new LoginModel { Username = newUser.Username, Password = newUser.Password, UserType = newUser.UserType };
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "CreateLoginAndReturnId/";
+
+            // The HTTP request body we will send
+            string jsonLogin = JsonSerializer.Serialize<LoginModel>(loginToSend);
+            StringContent httpContent = new(jsonLogin);
+
+            // Call the endpoint
+            HttpResponseMessage response = await ClientFactory.CreateClient().PostAsync(endpoint, httpContent);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+
+        // basically, puts you back to the default CreateAccounts page when you submit
+        isEditable = false;
+        createStudent = false;
+        createStaff = false;
+        info = string.Empty;
+        newUser.Username = string.Empty;
+        newUser.Password = string.Empty;
+    }
+
+    async Task OnAddButtonClickedStudent()
+    {
+        newUser.Username = user_textbox_student.Text;
+        newUser.Password = pass_textbox_student.Text;
+
+        if (newUser.Username == null || newUser.Password == null || myStaffComponent?.dataGrid?.SelectedRow == null)
+        {
+            info = "Please enter a username and password and select a staff to assign the student to.";
+            newUser.Username = string.Empty;
+            newUser.Password = string.Empty;
+            return;
+        }
+
+        newUser.UserType = UserType.Student;
+
+        //TODO: store STUDENT user in database
+
+
+
+        // Create the student
+        try
+        {
+            LoginModel loginToSend = new LoginModel { Username = newUser.Username, Password = newUser.Password, UserType = newUser.UserType };
+            // The API endpoint to call
+            int associatedStaffId = myStaffComponent.dataGrid.SelectedRow.Id;
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "CreateLoginAndReturnId/?staffId=" + associatedStaffId;
+
+            // The HTTP request body we will send
+            string jsonLogin = JsonSerializer.Serialize<LoginModel>(loginToSend);
+            StringContent httpContent = new(jsonLogin);
+
+            // Call the endpoint
+            HttpResponseMessage response = await ClientFactory.CreateClient().PostAsync(endpoint, httpContent);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+
+
+
+        // basically, puts you back to the default CreateAccounts page when you submit
+        isEditable = false;
+        createStudent = false;
+        createStaff = false;
+        info = string.Empty;
+        newUser.Username = string.Empty;
+        newUser.Password = string.Empty;
+    }
+}

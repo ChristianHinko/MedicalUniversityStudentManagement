@@ -1,0 +1,160 @@
+﻿@page "/configureartifacts"
+@using Microsoft.Extensions.Configuration
+@inject IHttpClientFactory ClientFactory
+@inject IConfiguration Configuration
+
+<CardBody>
+    <Row>
+        <Column>
+            <h3>Current Required Artifacts</h3>
+            <Fields>
+                <Field>
+                    <FieldBody>
+                        <Inline>
+                            <Button Color="Color.Primary" Clicked="@Reload" Margin="Margin.Is1" Size="Size.Small"> Refresh</Button>
+                        </Inline>
+                    </FieldBody>
+                </Field>
+            </Fields>
+            <DataGrid TItem="RequiredArtifactModel"
+                      @ref="dataGrid"
+                      Data="@RequiredArtifacts"
+                      SortMode="DataGridSortMode.Multiple"
+                      Striped="true"
+                      Bordered="true"
+                      Hoverable="true"
+                      Filterable="true"
+                      PageSize="10"
+                      ShowPager="@true"
+                      SelectedRowChanged="@OnSelectedRowChanged">
+                <EmptyTemplate>No records...</EmptyTemplate>
+                <DataGridColumns>
+                    <DataGridColumn TItem="RequiredArtifactModel" Field="@nameof(RequiredArtifactModel.Name)" Caption="Name" Editable="false">
+                    </DataGridColumn>
+
+                </DataGridColumns>
+            </DataGrid>
+        </Column>
+    </Row>
+</CardBody>
+
+
+
+
+
+<hr />
+<Button Color="Color.Danger" Clicked="@OnDeleteRequiredArtifactsButtonClicked">Delete Selected</Button>
+<Button Color="Color.Success" Clicked="@OnCreateRequiredArtifactsButtonClicked">@CreateCloseButtonText</Button>
+@if (CreateRequiredArtifact)
+{
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8 offset-md-2">
+                <Card>
+                    <CardBody>
+                        Name: <TextEdit @ref="RequiredArtifactNameTextEdit" Placeholder="ie. Collage Transcript" />
+                    </CardBody>
+                </Card>
+            </div>
+        </div>
+    </div>
+    <Button Color="Color.Success" Clicked="@OnSubmitButtonClicked">Submit</Button>
+}
+
+
+
+@code
+{
+    DataGrid<RequiredArtifactModel> dataGrid;
+    public List<RequiredArtifactModel> RequiredArtifacts { get; set; } = new List<RequiredArtifactModel>();
+    public bool CreateRequiredArtifact = false;
+    string CreateCloseButtonText = "Create Required Artifact";
+    TextEdit RequiredArtifactNameTextEdit;
+
+    // Blazor event
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+    }
+
+    async Task Reload()
+    {
+        RequiredArtifacts = new List<RequiredArtifactModel>();
+        // Update our RequiredArtifacts list
+        try
+        {
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "GetRequiredArtifacts/";
+
+            IEnumerable<RequiredArtifactModel> getRequiredArtifactsResponse = await ClientFactory.CreateClient().GetFromJsonAsync<IEnumerable<RequiredArtifactModel>>(endpoint);
+            RequiredArtifacts.Clear();
+            RequiredArtifacts = getRequiredArtifactsResponse.ToList();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+
+
+        // always call StateHasChanged!
+        StateHasChanged();
+    }
+
+    async Task OnDeleteRequiredArtifactsButtonClicked()
+    {
+        string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "DeleteRequiredArtifactById/?requiredArtifactId=" + dataGrid.SelectedRow.Id;
+        var result = await ClientFactory.CreateClient().DeleteAsync(endpoint);
+
+
+        await Reload();
+        StateHasChanged();
+    }
+    void OnCreateRequiredArtifactsButtonClicked()
+    {
+        if (CreateRequiredArtifact)
+        {
+            CreateRequiredArtifact = false;
+            CreateCloseButtonText = "Create Required Artifact";
+        }
+        else
+        {
+            CreateRequiredArtifact = true;
+            CreateCloseButtonText = "Close";
+        }
+        StateHasChanged();
+    }
+
+    async Task OnSubmitButtonClicked()
+    {
+        try
+        {
+            RequiredArtifactModel requiredArtifactToSend = new RequiredArtifactModel { Name = RequiredArtifactNameTextEdit.Text };
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "CreateRequiredArtifactAndReturnId/";
+
+            // The HTTP request body we will send
+            string jsonRequiredArtifact = JsonSerializer.Serialize<RequiredArtifactModel>(requiredArtifactToSend);
+            StringContent httpContent = new(jsonRequiredArtifact);
+
+            // Call the endpoint
+            HttpResponseMessage response = await ClientFactory.CreateClient().PostAsync(endpoint, httpContent);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+        CreateRequiredArtifact = false;
+        CreateCloseButtonText = "Create Required Artifact";
+
+        await Reload();
+    }
+
+
+    void OnSelectedRowChanged()
+    {
+        StateHasChanged();
+    }
+
+}

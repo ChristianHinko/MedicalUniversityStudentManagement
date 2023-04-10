@@ -1,0 +1,283 @@
+﻿@inject IConfiguration Configuration
+@inject IHttpClientFactory _clientFactory
+@inject ProtectedSessionStorage sessionStorage
+@inject IConfiguration Configuration
+@using System.IO;
+
+<h3>ArtifactEditor</h3>
+
+
+<Card>
+    @{
+        //foreach (KeyValuePair<RequiredArtifactModel, ArtifactModel> entry in RequiredArtifactToArtifactMap)
+        for (int i = 0; i < RequiredArtifactToArtifactMap.Count; ++i)
+        {
+            int iter = i;
+            KeyValuePair<RequiredArtifactModel, ArtifactModel> entry = RequiredArtifactToArtifactMap.ElementAt(iter);
+
+            ArtifactModel currentArtifact = new ArtifactModel()
+            {
+                // Make a copy
+                Id = entry.Value.Id,
+                RequiredArtifactId = entry.Value.RequiredArtifactId,
+                StudentId = entry.Value.StudentId,
+                Document = entry.Value.Document,
+                CheckedOff = entry.Value.CheckedOff
+            };
+
+            RequiredArtifactModel currentRequiredArtifact = entry.Key;
+            if (currentArtifact != null && currentRequiredArtifact != null)
+            {
+                <Card>
+                    <CardBody>
+                        <CardTitle Size="5">@currentRequiredArtifact.Name</CardTitle>
+                        <InputFile OnChange="@(ev => LoadFiles(ev, currentArtifact))" />
+                        @if (UserType == "Staff")
+                        {
+                            <Button Color="Color.Success" Clicked="@(e => CheckOff(currentArtifact))">Checkoff</Button>
+                        }
+
+                            @if (currentArtifact?.Document == null)
+                            {
+                                <p class="text-danger">Document needs submiting!</p>
+                            }
+                            else
+                            {
+                                if (currentArtifact?.CheckedOff == false)
+                                {
+                                    <p class="text-warning">Submited, awaiting approval</p>
+                                }
+                                else
+                                {
+                                    <p class="text-success">Submited and aproved!</p>
+                                }
+                                <Button Color="Color.Info" @ref="DisplayDocButnRef" Clicked="@(e => DisplayDocButnClicked(iter))">Display Document toggle</Button>
+                                if (displayDocs[iter] == true)
+                                {
+                                    <RenderPdf inBytes="currentArtifact.Document" width="1100" height="850" />
+                                }
+                            }
+
+                        </CardBody>
+                </Card>
+            }
+
+        }
+
+    }
+</Card>
+
+
+
+@code
+{
+    [Parameter]
+    public bool IsCheckoffReadonly { get; set; } = true;
+    // list of all the artifacts the student has. ***Size = amount of rows in tblRequiredArtifacts***
+    List<ArtifactModel> student_artifacts = new List<ArtifactModel>();
+    public List<RequiredArtifactModel> RequiredArtifacts { get; set; } = new List<RequiredArtifactModel>();
+
+
+    Dictionary<RequiredArtifactModel, ArtifactModel> RequiredArtifactToArtifactMap = new Dictionary<RequiredArtifactModel, ArtifactModel>();
+    [Parameter]
+    public StudentModel myStudent { get; set; } = new StudentModel();
+
+
+    private string UserType = string.Empty;
+    bool bDisplayDoc = false;
+    Button DisplayDocButnRef;
+    private List<bool> displayDocs { get; set; } = new List<bool>();
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        UserType = (await sessionStorage.GetAsync<string>("UserType")).Value ?? string.Empty;
+        StateHasChanged();
+
+        if (UserType == "Student")
+        {
+            myStudent.Id = (await sessionStorage.GetAsync<Int32>("LoginId")).Value;
+        }
+
+
+        await Reload();
+    }
+
+
+    async Task LoadFiles(InputFileChangeEventArgs ev, ArtifactModel artifactChanged)
+    {
+        const int maxFileSize = 10 * 1000000; // 10MB
+        MemoryStream memory = new MemoryStream();
+        await ev.File.OpenReadStream(maxFileSize).CopyToAsync(memory);
+
+        artifactChanged.Document = memory.ToArray();
+
+
+        if (artifactChanged.Id <= 0)
+        {
+            // Invalid Id - so create one
+
+
+            // Create this Artifact in the database
+            try
+            {
+                // The API endpoint to call
+                string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "CreateArtifactAndReturnId";
+                endpoint += '?' + $"id={artifactChanged.Id}" + '&' + $"requiredArtifactId={artifactChanged.RequiredArtifactId}" + '&' + $"studentId={myStudent.Id}" + '&' + $"checkedOff={artifactChanged.CheckedOff.ToString().ToLower()}";
+
+                // The HTTP request body we will send
+                ByteArrayContent httpContent = new(artifactChanged.Document);
+
+                // Call the endpoint
+                HttpResponseMessage response = await _clientFactory.CreateClient().PostAsync(endpoint, httpContent);
+
+                // Update our Id from the new Artifact
+                int returnedId;
+                if (int.TryParse(await response.Content.ReadAsStringAsync(), out returnedId))
+                {
+                    artifactChanged.Id = returnedId;
+
+                }
+
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Database services must be offline");
+            }
+
+        }
+        else
+        {
+            // Update this Artifact in the database
+            try
+            {
+
+                // The API endpoint to call
+                string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "UpdateArtifactById";
+                endpoint += '?' + $"id={artifactChanged.Id}" + '&' + $"requiredArtifactId={artifactChanged.RequiredArtifactId}" + '&' + $"studentId={myStudent.Id}" + '&' + $"checkedOff={artifactChanged.CheckedOff.ToString().ToLower()}";
+
+                // The HTTP request body we will send
+                ByteArrayContent httpContent = new(artifactChanged.Document);
+
+                // Call the endpoint
+                HttpResponseMessage response = await _clientFactory.CreateClient().PutAsync(endpoint, httpContent);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Database services must be offline");
+            }
+        }
+
+        await Reload();
+    }
+
+
+
+
+    public async Task Reload()
+    {
+        student_artifacts.Clear();
+        RequiredArtifacts.Clear();
+        RequiredArtifactToArtifactMap.Clear();
+
+        // Update Required artifacts
+        RequiredArtifacts = new List<RequiredArtifactModel>();
+        // Update our RequiredArtifacts list
+        try
+        {
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "GetRequiredArtifacts/";
+
+            IEnumerable<RequiredArtifactModel> getRequiredArtifactsResponse = await _clientFactory.CreateClient().GetFromJsonAsync<IEnumerable<RequiredArtifactModel>>(endpoint);
+            RequiredArtifacts.Clear();
+            RequiredArtifacts = getRequiredArtifactsResponse.ToList();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+
+
+
+
+        // Update our Artifacts list
+        try
+        {
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "GetArtifactsByStudentId/?studentId=" + myStudent.Id;
+
+            IEnumerable<ArtifactModel> getArtifactsResponse = await _clientFactory.CreateClient().GetFromJsonAsync<IEnumerable<ArtifactModel>>(endpoint);
+            student_artifacts = new List<ArtifactModel>(getArtifactsResponse);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+
+
+        MapRequiredArtifactsToArtifacts();
+        // always call StateHasChanged!
+        StateHasChanged();
+    }
+
+    public void MapRequiredArtifactsToArtifacts()
+    {
+        RequiredArtifactToArtifactMap.Clear();
+        displayDocs.Clear();
+        foreach (RequiredArtifactModel requiredArtifact in RequiredArtifacts)
+        {
+            ArtifactModel artifactModelToPair = new ArtifactModel()
+            {
+                StudentId = myStudent.Id,
+                RequiredArtifactId = requiredArtifact.Id
+            };
+
+            foreach (ArtifactModel artifact in student_artifacts)
+            {
+                if (artifact.RequiredArtifactId == requiredArtifact.Id)
+                {
+                    artifactModelToPair = artifact;
+                }
+            }
+
+            RequiredArtifactToArtifactMap.Add(requiredArtifact, artifactModelToPair);
+            displayDocs.Add(false);
+        }
+    }
+
+    void DisplayDocButnClicked(int iteration)
+    {
+        displayDocs[iteration] = !displayDocs[iteration];
+
+        StateHasChanged();
+    }
+
+    async Task CheckOff(ArtifactModel artifactToCheckOff)
+    {
+        if (artifactToCheckOff == null)
+        {
+            return;
+        }
+
+
+
+        ByteArrayContent byteContentToUse;
+
+        if (artifactToCheckOff.Document == null)
+        {
+            byteContentToUse = new ByteArrayContent(new byte[0]); // empty bytearray
+        }
+        else
+        {
+            byteContentToUse = new(artifactToCheckOff.Document);
+        }
+        await _clientFactory.CreateClient().PutAsync(Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + $"UpdateArtifactById/?id={artifactToCheckOff.Id.ToString()}&requiredArtifactId={artifactToCheckOff.RequiredArtifactId.ToString()}&studentId={artifactToCheckOff.StudentId.ToString()}&checkedOff=true", byteContentToUse);
+    }
+
+    void OnSelectedRowChanged()
+    {
+        StateHasChanged();
+    }
+}

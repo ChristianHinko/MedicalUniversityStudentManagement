@@ -1,0 +1,112 @@
+﻿@page "/mystudents"
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+@inject IHttpClientFactory ClientFactory
+@inject ProtectedSessionStorage sessionStorage
+
+<CardBody>
+    <Row>
+        <Column>
+            <h3>Students</h3>
+            <Fields>
+                <Field>
+                    <FieldBody>
+                        <Inline>
+                            <Button Color="Color.Primary" Clicked="@ReloadTable" Margin="Margin.Is1" Size="Size.Small" Disabled="RefreshButtonDisabed" Loading="RefreshButtonDisabed"> Refresh</Button>
+                        </Inline>
+                    </FieldBody>
+                </Field>
+            </Fields>
+            <DataGrid TItem="StudentModel"
+                      @ref="dataGrid"
+                      Data="@studentModels"
+                      SortMode="DataGridSortMode.Multiple"
+                      Striped="true"
+                      Bordered="true"
+                      Hoverable="true"
+                      Filterable="true"
+                      PageSize="10"
+                      ShowPager="@true"
+                      SelectedRowChanged="@OnSelectedRowChanged">
+                <EmptyTemplate>No records...</EmptyTemplate>
+                <DataGridColumns>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.Id)" Caption="Id" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.StudentIdNumber)" Caption="StudentIdNumber" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.FirstName)" Caption="FirstName" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.LastName)" Caption="LastName" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.Birthday)" Caption="Birthday" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.Address)" Caption="Address" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.Major)" Caption="Major" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.FirstYearEnrolled)" Caption="FirstYearEnrolled" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.HighSchoolAttended)" Caption="HighSchoolAttended" Editable="true">
+                    </DataGridColumn>
+                    <DataGridColumn TItem="StudentModel" Field="@nameof(StudentModel.UndergraduateSchoolAttended)" Caption="UndergraduateSchoolAttended" Editable="true">
+                    </DataGridColumn>
+
+                </DataGridColumns>
+            </DataGrid>
+        </Column>
+    </Row>
+</CardBody>
+<hr />
+
+@if (dataGrid != null && dataGrid.SelectedRow != null)
+{
+    <StudentInfo myStudent="@dataGrid?.SelectedRow" />
+    <br />
+    <ArtifactEditor myStudent="@dataGrid?.SelectedRow" IsCheckoffReadonly="false"/>
+}
+
+@code
+{
+
+    DataGrid<StudentModel> dataGrid;
+    List<StudentModel> studentModels;
+    bool RefreshButtonDisabed;
+
+
+    // Blazor event
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadTable();
+    }
+
+    async Task ReloadTable()
+    {
+        studentModels = new List<StudentModel>();
+        // Update our Students list
+        try
+        {
+            Int32 loggedInStaffId = -1;
+            loggedInStaffId = (await sessionStorage.GetAsync<Int32>("LoginId")).Value;
+            // The API endpoint to call
+            string endpoint = Configuration.GetValue<string>("MUSMDatabaseServicesAPI") + "GetStudentsByStaffId/?staffId=" + loggedInStaffId;
+
+            IEnumerable<StudentModel> getStudentsByStaffIdResponse = await ClientFactory.CreateClient().GetFromJsonAsync<IEnumerable<StudentModel>>(endpoint);
+            studentModels = new List<StudentModel>(getStudentsByStaffIdResponse);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Database services must be offline");
+        }
+
+
+        // always call StateHasChanged!
+        StateHasChanged();
+    }
+
+    void OnSelectedRowChanged()
+    {
+        StateHasChanged();
+    }
+
+
+}

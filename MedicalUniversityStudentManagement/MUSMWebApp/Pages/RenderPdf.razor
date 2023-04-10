@@ -1,0 +1,56 @@
+﻿
+
+
+@if (!string.IsNullOrEmpty(pdfContent))
+{
+                <!--- TODO: bootstrap --->
+<div>
+    <iframe src="@pdfContent" width="@width" height="@height"/>
+</div>
+
+}
+
+
+@code {
+    [Parameter]
+    public byte[] inBytes { get; set; }
+    //{
+    //    get
+    //    {
+    //        return inBytes;
+    //    }
+    //    set
+    //    {
+    //        inBytes = value;
+    //        rendered = false;
+    //    }
+    //}
+
+    [Parameter]
+    public int width { get; set; } = 850;
+    [Parameter]
+    public int height { get; set; } = 1100;
+
+
+    string pdfContent = string.Empty;
+    bool rendered = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (inBytes is null)
+        {
+            return;
+        }
+
+        if (rendered == false)
+        {
+            rendered = true;
+            pdfContent = "data:application/pdf;base64,";
+            pdfContent += System.Convert.ToBase64String(inBytes);
+            StateHasChanged();
+        }
+
+    }
+
+
+}
